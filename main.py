@@ -5,10 +5,11 @@ import re
 import subprocess
 from html import escape
 from typing import List, Dict, Tuple, Optional, Any
+from pathlib import Path
 
 USER_PATTERN = r"_[a-z0-9]{5}$"
 DATE = datetime.datetime.now().strftime("%Y-%m-%d")
-
+USER_PATH = Path(os.environ["USERPROFILE"])
 
 class Entry:
 
@@ -43,6 +44,7 @@ class Generator:
 
         self.entries: List[Entry] = []
         self.previous_entries: List[Entry] = []
+
         self.added_entries: List[Entry] = []
         self.removed_entries: List[Entry] = []
         self.changed_data: List = []
@@ -497,55 +499,182 @@ class EnvironmentVariables(Generator):
         entries = sorted(entries, key=lambda x: x.display_name)
         self.entries = entries
 
+class DirListing(Generator):
+
+    def __init__(self):
+        super().__init__()
+        self.path = ""
+
+    def get(self):
+        entries = []
+        for name in os.listdir(self.path):
+            entry = Entry()
+            entry.display_name = name
+            entry.unique_name = name
+            entry.fields = {
+                "name": name,
+                "value": None
+            }
+            entries.append(entry)
+
+        entries = sorted(entries, key=lambda x: x.display_name)
+        self.entries = entries
+
+class AppDataLocal(DirListing):
+
+    def __init__(self):
+        super().__init__()
+        self.path = USER_PATH / "AppData" / "Local"
+
+class AppDataLocalLow(DirListing):
+
+    def __init__(self):
+        super().__init__()
+        self.path = USER_PATH / "AppData" / "LocalLow"
+
+class AppDataRoaming(DirListing):
+
+    def __init__(self):
+        super().__init__()
+        self.path = USER_PATH / "AppData" / "Roaming"
+
+class ProgramData(DirListing):
+
+    def __init__(self):
+        super().__init__()
+        self.path = "C:\\ProgramData"
+
+class ProgramFiles(DirListing):
+
+    def __init__(self):
+        super().__init__()
+        self.path = "C:\\Program Files"
+
+class ProgramFilesx86(DirListing):
+
+    def __init__(self):
+        super().__init__()
+        self.path = "C:\\Program Files (x86)"
+
+class Windows(DirListing):
+
+    def __init__(self):
+        super().__init__()
+        self.path = "C:\\Windows"
+
+class System32(DirListing):
+
+    def __init__(self):
+        super().__init__()
+        self.path = "C:\\Windows\\System32"
+
 
 if __name__ == '__main__':
+
+    executed = []
+
+    system32 = System32()
+    system32.run()
+    executed.append(system32)
+
+    windows = Windows()
+    windows.run()
+    executed.append(windows)
+
+    program_files = ProgramFiles()
+    program_files.run()
+    executed.append(program_files)
+
+    program_files_x86 = ProgramFilesx86()
+    program_files_x86.run()
+    executed.append(program_files_x86)
+
+    appdata_local = AppDataLocal()
+    appdata_local.run()
+    executed.append(appdata_local)
+
+    appdata_local_low = AppDataLocalLow()
+    appdata_local_low.run()
+    executed.append(appdata_local_low)
+
+    appdata_roaming = AppDataRoaming()
+    appdata_roaming.run()
+    executed.append(appdata_roaming)
+
+    program_data = ProgramData()
+    program_data.run()
+    executed.append(program_data)
+
     groups = Groups()
     groups.run()
+    executed.append(groups)
 
     users = Users()
     users.run()
+    executed.append(users)
 
     sound = SoundDevices()
     sound.run()
+    executed.append(sound)
 
     video = VideoControllers()
     video.run()
+    executed.append(video)
 
     displays = Displays()
     displays.run()
+    executed.append(displays)
 
     pointing_devices = PointingDevices()
     pointing_devices.run()
+    executed.append(pointing_devices)
 
     network_adapters = NetworkAdapters()
     network_adapters.run()
+    executed.append(network_adapters)
 
     printers = Printers()
     printers.run()
+    executed.append(printers)
 
     env_vars = EnvironmentVariables()
     env_vars.run()
+    executed.append(env_vars)
 
     services = Services()
     services.run()
+    executed.append(services)
 
     startup = StartupPrograms()
     startup.run()
+    executed.append(startup)
 
     devices = Devices()
     devices.run()
+    executed.append(devices)
 
     disks = Disks()
     disks.run()
+    executed.append(disks)
 
     physical_disks = PhysicalDisks()
     physical_disks.run()
+    executed.append(physical_disks)
 
     keyboards = Keyboards()
     keyboards.run()
+    executed.append(keyboards)
 
     programs = InstalledPrograms()
     programs.run()
+    executed.append(programs)
 
     # drivers = Drivers()
     # drivers.run()
+    # executed.append(drivers)
+
+    print("### CHANGED")
+    for gen in executed:
+        has_diff = gen.added_entries or gen.removed_entries or gen.changed_data or None
+        if has_diff:
+            print(gen.name)
