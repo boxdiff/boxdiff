@@ -1,8 +1,13 @@
+import datetime
 import json
 import os.path
+import re
 import subprocess
 from html import escape
 from typing import List, Dict, Tuple, Optional, Any
+
+USER_PATTERN = r"_[a-z0-9]{5}$"
+DATE = datetime.datetime.now().strftime("%Y-%m-%d")
 
 
 class Entry:
@@ -31,8 +36,6 @@ class Generator:
 
     def __init__(self):
         self.name = self.__class__.__name__
-        self.display_key = ""
-        self.unique_key = ""
 
         self.fields = {}
         self.ignore_keys = []
@@ -135,7 +138,7 @@ class Generator:
         
         </head>
         <body>
-        <h1>{escape(self.name)}</h1>
+        <h1>{escape(self.name)} - {DATE}</h1>
 """
 
         # Added
@@ -187,7 +190,7 @@ class Generator:
                 except Exception:
                     pass
 
-                html += f"<li>{escape(key)}: {before_value} <span class='arrow'>→</span> {after_value}</li>\n"
+                html += f"<li>{escape(key)}: {before_value} <span class='arrow'>-></span> {after_value}</li>\n"
             html += "</ul>\n"
         html += "</div>\n"
 
@@ -248,6 +251,8 @@ class PowershellGenerator(Generator):
         assert proc.returncode == 0, f"{proc.returncode}\n{proc.stdout}\n{proc.stderr}"
         items = json.loads(proc.stdout)
 
+        unique_names = set()
+
         entries = []
         for item in items:
             self.process_fields(item)
@@ -264,6 +269,12 @@ class PowershellGenerator(Generator):
 
             entry = Entry()
             entry.unique_name = item[self.unique_key]
+
+            if entry.unique_name in unique_names:
+                assert False, entry.unique_name
+
+            unique_names.add(entry.unique_name)
+
             entry.display_name = item[self.display_key]
             entry.fields = fields
             entries.append(entry)
@@ -276,11 +287,18 @@ class Services(PowershellGenerator):
 
     def __init__(self):
         super().__init__()
-        # self.command += '"Get-CimInstance \'CIM_Service\' | ConvertTo-Json"'
-        # self.command += '"Get-Service | ConvertTo-Json"'
         self.command += '"Get-CimInstance win32_service | ConvertTo-Json"'
         self.keep_keys = ['Caption', 'Description', 'InstallDate', 'Name', 'Status', 'StartMode', 'DesktopInteract',
                           'DisplayName', 'ErrorControl', 'PathName', 'ServiceType', 'StartName', 'DelayedAutoStart']
+
+    def process_fields(self, fields: Dict):
+        user_keys = ["Caption", "DisplayName", "Name"]
+        for key in user_keys:
+            value = fields.get(key)
+            if isinstance(value, str):
+                split = re.split(USER_PATTERN, value)
+                if split[0]:
+                    fields[key] = split[0]
 
 
 class InstalledPrograms(PowershellGenerator):
@@ -293,22 +311,241 @@ class InstalledPrograms(PowershellGenerator):
                           'Vendor', 'Version']
 
 
+class StartupPrograms(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.command += '"Get-CimInstance Win32_StartupCommand | ConvertTo-Json"'
+        self.keep_keys = ['Caption', 'Description', 'SettingID', 'Command', 'Location', 'Name', 'User', 'UserSID',
+                          'PSComputerName']
+
+
+class PhysicalDisks(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'UniqueId'
+        self.display_key = "FriendlyName"
+        self.command += '"Get-PhysicalDisk | ConvertTo-Json"'
+        self.keep_keys = ['Usage', 'OperationalStatus', 'HealthStatus', 'BusType', 'CannotPoolReason', 'MediaType',
+                          'SpindleSpeed', 'UniqueId', 'FriendlyName', 'Model', 'PhysicalLocation', 'SerialNumber',
+                          'AllocatedSize', 'FirmwareVersion', 'FruId', 'Size', 'DeviceId']
+
+
+class Disks(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'UniqueId'
+        self.display_key = "FriendlyName"
+        self.command += '"Get-Disk | ConvertTo-Json"'
+        self.keep_keys = ['OperationalStatus', 'HealthStatus', 'BusType', 'UniqueId', 'FriendlyName', 'Model',
+                          'SerialNumber', 'AllocatedSize', 'FirmwareVersion']
+
+
+class Printers(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'Name'
+        self.display_key = "Name"
+        self.command += '"Get-Printer | ConvertTo-Json"'
+        self.keep_keys = ['PrinterStatus', 'Type', 'DeviceType', 'Caption', 'Description', 'InstanceID', 'HealthState',
+                          'Name', 'Datatype', 'DriverName', 'Location', 'PortName', 'PrintProcessor', 'Priority']
+
+
+class NetworkAdapters(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'DeviceID'
+        self.display_key = "ifDesc"
+        self.command += '"Get-NetAdapter | ConvertTo-Json"'
+        self.keep_keys = ['MacAddress', 'Status', 'MediaType', 'PhysicalMediaType', 'MediaConnectionState',
+                          'DriverInformation', 'DriverFileName', 'NdisVersion', 'InterfaceAlias', 'ifDesc', 'ifName',
+                          'DriverVersion', 'LinkLayerAddress', 'InstanceID', 'DeviceID',
+                          'ActiveMaximumTransmissionUnit', 'PermanentAddress', 'ComponentID', 'DeviceName',
+                          'DriverDate', 'DriverMajorNdisVersion', 'DriverMinorNdisVersion', 'DriverName',
+                          'DriverProvider', 'DriverVersionString', 'InterfaceGuid', 'InterfaceName', 'NetLuid',
+                          'PnPDeviceID']
+
+
+class PointingDevices(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'DeviceID'
+        self.display_key = "Caption"
+        self.command += '"Get-CimInstance -ClassName Win32_PointingDevice| ConvertTo-Json"'
+        self.keep_keys = ['Caption', 'Description', 'DeviceID', 'PNPDeviceID', 'Manufacturer']
+
+
+class VideoControllers(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'Caption'
+        self.display_key = "Caption"
+        self.command += '"Get-CimInstance -ClassName Win32_VideoController | ConvertTo-Json"'
+        self.keep_keys = ['Caption', 'Description', 'Name', 'Status', 'Availability', 'DeviceID', 'PNPDeviceID',
+                          'CurrentNumberOfColors', 'VideoMemoryType', 'VideoProcessor', 'AdapterCompatibility',
+                          'AdapterDACType', 'DriverDate', 'DriverVersion', 'InfFilename', 'InfSection']
+
+
+class SoundDevices(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'DeviceID'
+        self.display_key = "Caption"
+        self.command += '"Get-CimInstance -ClassName Win32_SoundDevice | ConvertTo-Json"'
+        self.keep_keys = ['Caption', 'Description', 'Name', 'Status', 'Availability', 'DeviceID', 'PNPDeviceID',
+                          'Manufacturer']
+
+
+class Displays(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'PNPDeviceID'
+        self.display_key = "Caption"
+        self.command += '"Get-CimInstance -ClassName CIM_Display | ConvertTo-Json"'
+        self.keep_keys = ['Caption', 'Description', 'Name', 'Status', 'Availability', 'PNPDeviceID']
+
+
+class Users(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'Name'
+        self.display_key = "Name"
+        self.command += '"Get-LocalUser | ConvertTo-Json"'
+        self.keep_keys = ['AccountExpires', 'Description', 'Enabled', 'FullName', 'PasswordChangeableDate',
+                          'PasswordExpires', 'PasswordExpires', 'UserMayChangePassword', 'PasswordRequired',
+                          'PasswordLastSet', 'PrincipalSource']
+
+
+class Groups(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'Name'
+        self.display_key = "Name"
+        self.command += '"Get-LocalGroup | ConvertTo-Json"'
+        self.keep_keys = ['Description', 'Name', 'PrincipalSource']
+
+
+class Devices(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = "DeviceID"
+        self.command += '"Get-PnpDevice | ConvertTo-Json"'
+        self.keep_keys = ['Caption', 'Description', 'FriendlyName', 'InstanceId', 'Problem', 'InstallDate', 'Name',
+                          'Status', 'Availability', 'ConfigManagerUserConfig', 'DeviceID', 'PNPDeviceID', 'StatusInfo',
+                          'HardwareID', 'Manufacturer', 'Service']
+
+    def process_fields(self, fields: Dict):
+
+        if fields['Caption'] is None:
+            fields['Caption'] = fields['DeviceID']
+
+        if fields['Name'] is None:
+            fields['Name'] = fields['DeviceID']
+
+
+class Drivers(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.display_key = "ClassDescription"
+        self.unique_key = "Driver"
+        self.command += '"Get-WindowsDriver -Online -All | ConvertTo-Json"'
+        self.keep_keys = ['Driver', 'OriginalFileName', 'Inbox', 'CatalogFile', 'ClassName', 'ClassGuid',
+                          'ClassDescription', 'BootCritical', 'DriverSignature', 'ProviderName', 'Date', 'MajorVersion',
+                          'MinorVersion', 'Build', 'Revision', 'Path', 'Online', 'WinPath', 'SysDrivePath', 'LogPath',
+                          'Version']
+
+
 class Keyboards(PowershellGenerator):
 
     def __init__(self):
         super().__init__()
         self.display_key = 'Description'
         self.unique_key = 'DeviceID'
-        self.command += '"Get-CimInstance win32_keyboard | ConvertTo-Json"'
+        self.command += '"Get-CimInstance Win32_Keyboard | ConvertTo-Json"'
         self.keep_keys = ['Description', 'DeviceID', 'Availability', 'Caption', ]
 
 
+class EnvironmentVariables(Generator):
+
+    def __init__(self):
+        super().__init__()
+
+    def get(self):
+        entries = []
+        for key, value in sorted(os.environ.items()):
+            entry = Entry()
+            entry.display_name = key
+            entry.unique_name = key
+            entry.fields = {
+                "name": key,
+                "value": value
+            }
+            entries.append(entry)
+
+        entries = sorted(entries, key=lambda x: x.display_name)
+        self.entries = entries
+
+
 if __name__ == '__main__':
-    programs = InstalledPrograms()
-    # programs.run()
+    groups = Groups()
+    groups.run()
+
+    users = Users()
+    users.run()
+
+    sound = SoundDevices()
+    sound.run()
+
+    video = VideoControllers()
+    video.run()
+
+    displays = Displays()
+    displays.run()
+
+    pointing_devices = PointingDevices()
+    pointing_devices.run()
+
+    network_adapters = NetworkAdapters()
+    network_adapters.run()
+
+    printers = Printers()
+    printers.run()
+
+    env_vars = EnvironmentVariables()
+    env_vars.run()
 
     services = Services()
     services.run()
 
-    # keyboards = Keyboards()
-    # keyboards.get()
+    startup = StartupPrograms()
+    startup.run()
+
+    devices = Devices()
+    devices.run()
+
+    disks = Disks()
+    disks.run()
+
+    physical_disks = PhysicalDisks()
+    physical_disks.run()
+
+    keyboards = Keyboards()
+    keyboards.run()
+
+    programs = InstalledPrograms()
+    programs.run()
+
+    # drivers = Drivers()
+    # drivers.run()
