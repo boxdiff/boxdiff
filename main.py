@@ -344,6 +344,15 @@ class Disks(PowershellGenerator):
         self.keep_keys = ['OperationalStatus', 'HealthStatus', 'BusType', 'UniqueId', 'FriendlyName', 'Model',
                           'SerialNumber', 'AllocatedSize', 'FirmwareVersion']
 
+class Drives(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'Name'
+        self.display_key = "Name"
+        self.command += '"Get-PSDrive | ConvertTo-Json"'
+        self.keep_keys = ['Name', 'Root', 'Description']
+
 
 class Printers(PowershellGenerator):
 
@@ -666,6 +675,10 @@ if __name__ == '__main__':
     physical_disks = PhysicalDisks()
     physical_disks.run()
     executed.append(physical_disks)
+
+    drives = Drives()
+    drives.run()
+    executed.append(drives)
 
     keyboards = Keyboards()
     keyboards.run()
