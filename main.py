@@ -98,7 +98,7 @@ class Generator:
             for key, value in current_entry.fields.items():
                 previous_value = previous_entry.fields.get(key)
                 if value != previous_value:
-                    changed.changed_fields.append((key, value, previous_value))
+                    changed.changed_fields.append((key, previous_value, value))
 
             for key, value in previous_entry.fields.items():
                 if key not in current_entry.fields:
@@ -142,7 +142,7 @@ class Generator:
         <body>
         <h1>{escape(self.name)} - {DATE}</h1>
 """
-
+        # TODO refactor. Add classes.
         # Added
         html += f"<h2>Added ({len(self.added_entries)})</h2>\n"
         html += "<div class='entry-block'>\n"
@@ -445,7 +445,7 @@ class Devices(PowershellGenerator):
         self.command += '"Get-PnpDevice | ConvertTo-Json"'
         self.keep_keys = ['Caption', 'Description', 'FriendlyName', 'InstanceId', 'Problem', 'InstallDate', 'Name',
                           'Status', 'Availability', 'ConfigManagerUserConfig', 'DeviceID', 'PNPDeviceID', 'StatusInfo',
-                          'HardwareID', 'Manufacturer', 'Service']
+                          'HardwareID', 'Manufacturer', 'Service', 'PNPClass']
 
     def process_fields(self, fields: Dict):
 
@@ -568,10 +568,20 @@ class System32(DirListing):
         super().__init__()
         self.path = "C:\\Windows\\System32"
 
+class DriverFiles(DirListing):
+
+    def __init__(self):
+        super().__init__()
+        self.path = "C:\\Windows\\System32\\drivers"
+
 
 if __name__ == '__main__':
 
     executed = []
+
+    devices = Devices()
+    devices.run()
+    executed.append(devices)
 
     system32 = System32()
     system32.run()
@@ -649,10 +659,6 @@ if __name__ == '__main__':
     startup.run()
     executed.append(startup)
 
-    devices = Devices()
-    devices.run()
-    executed.append(devices)
-
     disks = Disks()
     disks.run()
     executed.append(disks)
@@ -669,11 +675,17 @@ if __name__ == '__main__':
     programs.run()
     executed.append(programs)
 
+    driver_files = DriverFiles()
+    driver_files.run()
+    executed.append(driver_files)
+
     # drivers = Drivers()
     # drivers.run()
     # executed.append(drivers)
 
-    print("### CHANGED")
+    # Bluetooth
+
+    print("\n### CHANGED")
     for gen in executed:
         has_diff = gen.added_entries or gen.removed_entries or gen.changed_data or None
         if has_diff:
