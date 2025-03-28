@@ -507,6 +507,16 @@ class Tasks(PowershellGenerator):
         self.command += '"Get-ScheduledTask | Select-Object URI, TaskName, SecurityDescriptor, Author, State, Triggers | ConvertTo-Json"'
         self.keep_keys = ['TaskName', 'URI', 'SecurityDescriptor', 'Author', 'State', 'Triggers']
 
+class FirewallRules(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.display_key = "DisplayName"
+        self.unique_key = "ID"
+        self.command += '"Get-NetFirewallRule | ConvertTo-Json"'
+        self.keep_keys = ['Name', 'ID', 'DisplayName', 'Group', 'Enabled', 'Profile', 'Direction', 'Action', 'Status' ,'EdgeTraversalPolicy', 'LSM', 'PrimaryStatus', 'EnforcementStatus', 'PolicyStoreSourceType', 'InstanceID', 'PolicyDecisionStrategy', 'ConditionListType', 'ExecutionStrategy', 'SequencedActions', 'DisplayGroup', 'Owner', 'PolicyStoreSource', 'Profiles', 'RuleGroup', 'StatusCode']
+
+
 class Keyboards(PowershellGenerator):
 
     def __init__(self):
@@ -744,6 +754,10 @@ if __name__ == '__main__':
     tasks = Tasks()
     tasks.run()
     executed.append(tasks)
+
+    firewall_rules = FirewallRules()
+    firewall_rules.run()
+    executed.append(firewall_rules)
 
     programs = InstalledPrograms()
     programs.run()
