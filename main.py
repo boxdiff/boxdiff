@@ -298,6 +298,15 @@ class InstalledPrograms(PowershellGenerator):
                           'InstallSource', 'InstallState', 'Name', 'LocalPackage', 'PackageCode', 'PackageName',
                           'Vendor', 'Version']
 
+class InstalledProgramsAppx(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.display_key = "Name"
+        self.unique_key = "PackageFullName"
+        self.command += '"Get-AppxPackage | ConvertTo-Json"'
+        self.keep_keys = ['Status', 'SignatureKind', 'IsPartiallyStaged', 'NonRemovable', 'Version', 'InstallLocation', 'PackageFullName', 'PackageFamilyName', 'ResourceId', 'PublisherId', 'Name', 'Publisher']
+
 
 class StartupPrograms(PowershellGenerator):
 
@@ -768,7 +777,9 @@ if __name__ == '__main__':
     programs.run()
     executed.append(programs)
 
-
+    appx = InstalledProgramsAppx()
+    appx.run()
+    executed.append(appx)
 
     # drivers = Drivers()
     # drivers.run()
