@@ -489,6 +489,23 @@ class ComputerInfo(PowershellGenerator):
         self.command += '"Get-ComputerInfo | ConvertTo-Json"'
         self.keep_keys = ['DeviceGuardUserModeCodeIntegrityPolicyEnforcementStatus', 'DeviceGuardCodeIntegrityPolicyEnforcementStatus', 'DeviceGuardSmartStatus', 'HyperVisorPresent', 'LogonServer', 'KeyboardLayout', 'OsStatus', 'OsRegisteredUser', 'OsSerialNumber', 'OsPrimary', 'OsPortableOperatingSystem', 'OsLanguage', 'OsManufacturer', 'OsMaxNumberOfProcesses', 'OsMaxProcessMemorySize', 'OsEncryptionLevel', 'OsDistributed', 'OsCodeSet', 'OsLocaleID', 'OsWindowsDirectory', 'OsSystemDrive', 'OsSystemDirectory', 'OsSystemDevice', 'OsBootDevice', 'OsBuildNumber', 'OsOperatingSystemSKU', 'OsType', 'CsWorkgroup', 'CsWakeUpType', 'CsUserName', 'CsPrimaryOwnerName', 'CsPartOfDomain', 'CsPowerOnPasswordStatus', 'CsManufacturer', 'CsBootupState', 'CsDomain', 'CsDNSHostName', 'CsBootROMSupported', 'CsAutomaticResetCapability', 'CsAutomaticResetBootOption', 'CsAutomaticManagedPagefile', 'CsAdminPasswordStatus', 'BiosVersion', 'BiosSystemBiosMajorVersion', 'BiosSystemBiosMinorVersion', 'BiosStatus', 'BiosSoftwareElementState', 'BiosSMBIOSPresent', 'BiosSMBIOSBIOSVersion', 'BiosSMBIOSMajorVersion', 'BiosSMBIOSMinorVersion', 'BiosSeralNumber', 'BiosManufacturer', 'BiosFirmwareType', 'BiosEmbeddedControllerMajorVersion', 'BiosEmbeddedControllerMinorVersion', 'WindowsVersion', 'OSDisplayVersion', 'WindowsProductId', 'WindowsBuildLabEx']
 
+class OsConfig(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.display_key = "FriendlyName"
+        self.unique_key = "SourceId"
+        self.command += '"Get-OSConfiguration | ConvertTo-Json"'
+        self.keep_keys = ['SourceId', 'FriendlyName']
+
+class Tasks(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.display_key = "TaskName"
+        self.unique_key = "URI"
+        self.command += '"Get-ScheduledTask | Select-Object URI, TaskName, SecurityDescriptor, Author, State, Triggers | ConvertTo-Json"'
+        self.keep_keys = ['TaskName', 'URI', 'SecurityDescriptor', 'Author', 'State', 'Triggers']
 
 class Keyboards(PowershellGenerator):
 
@@ -719,6 +736,14 @@ if __name__ == '__main__':
     computer_info = ComputerInfo()
     computer_info.run()
     executed.append(computer_info)
+
+    os_config = OsConfig()
+    os_config.run()
+    executed.append(os_config)
+
+    tasks = Tasks()
+    tasks.run()
+    executed.append(tasks)
 
     programs = InstalledPrograms()
     programs.run()
