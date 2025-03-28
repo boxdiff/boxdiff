@@ -107,6 +107,25 @@ class Generator:
             if changed.changed_fields:
                 self.changed_data.append(changed)
 
+    @staticmethod
+    def entry_block(title, entries) -> str:
+        html = f"<h2>{title} ({len(entries)})</h2>\n"
+        html += "<div class='entry-block'>\n"
+        for e in entries:
+            html += f"<h3>{escape(e.display_name)} ({escape(e.unique_name)})</h3>\n"
+            html += "<ul>\n"
+            for key, value in e.fields.items():
+                try:
+                    value = escape(value)
+                except Exception:
+                    pass
+
+                html += f"<li>{escape(key)}: {value}</li>\n"
+            html += "</ul>\n"
+        html += "</div>"
+
+        return html
+
     def write_results(self):
         html = f"""<!DOCTYPE html>
         <html>
@@ -144,36 +163,10 @@ class Generator:
 """
         # TODO refactor. Add classes.
         # Added
-        html += f"<h2>Added ({len(self.added_entries)})</h2>\n"
-        html += "<div class='entry-block'>\n"
-        for e in self.added_entries:
-            html += f"<h3>{escape(e.display_name)} ({escape(e.unique_name)})</h3>\n"
-            html += "<ul>\n"
-            for key, value in e.fields.items():
-                try:
-                    value = escape(value)
-                except Exception:
-                    pass
-
-                html += f"<li>{escape(key)}: {value}</li>\n"
-            html += "</ul>\n"
-        html += "</div>"
+        html += self.entry_block("Added", self.added_entries)
 
         # Removed
-        html += f"<h2>Removed ({len(self.removed_entries)})</h2>\n"
-        html += "<div class='entry-block'>\n"
-        for e in self.removed_entries:
-            html += f"<h3>{escape(e.display_name)} ({escape(e.unique_name)})</h3>\n"
-            html += "<ul>\n"
-            for key, value in e.fields.items():
-                try:
-                    value = escape(value)
-                except Exception:
-                    pass
-
-                html += f"<li>{escape(key)}: {value}</li>\n"
-            html += "</ul>\n"
-        html += "</div>"
+        html += self.entry_block("Removed", self.removed_entries)
 
         # Changed
         html += f"<h2>Changed ({len(self.changed_data)})</h2>\n"
@@ -197,20 +190,7 @@ class Generator:
         html += "</div>\n"
 
         # Current
-        html += f"<h2>Current ({len(self.entries)})</h2>\n"
-        html += "<div class='entry-block'>\n"
-        for e in self.entries:
-            html += f"<h3>{escape(e.display_name)} ({escape(e.unique_name)})</h3>\n"
-            html += "<ul>\n"
-            for key, value in e.fields.items():
-                try:
-                    value = escape(value)
-                except Exception:
-                    pass
-
-                html += f"<li>{escape(key)}: {value}</li>\n"
-            html += "</ul>\n"
-        html += "</div>\n"
+        html += self.entry_block("Current", self.entries)
 
         # End
         html += "</body></html>"
@@ -237,7 +217,6 @@ class Generator:
         self.get()
         self.load_previous()
         self.process_changes()
-        self.write_results()
 
 
 class PowershellGenerator(Generator):
@@ -252,6 +231,8 @@ class PowershellGenerator(Generator):
         proc = subprocess.run(self.command, text=True, capture_output=True, check=False, encoding="utf-8")
         assert proc.returncode == 0, f"{proc.returncode}\n{proc.stdout}\n{proc.stderr}"
         items = json.loads(proc.stdout)
+        if isinstance(items, dict):
+            items = [items]
 
         unique_names = set()
 
@@ -353,6 +334,24 @@ class Drives(PowershellGenerator):
         self.command += '"Get-PSDrive | ConvertTo-Json"'
         self.keep_keys = ['Name', 'Root', 'Description']
 
+class Partitions(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'Guid'
+        self.display_key = "Guid"
+        self.command += '"Get-Partition | ConvertTo-Json"'
+        self.keep_keys = ['Guid', 'Size', 'PartitionNumber', 'Offset', 'IsActive', 'GptType', 'DiskNumber', 'UniqueId', 'Type', 'OperationalStatus', 'DiskId', 'UniqueId', 'IsActive', 'IsBoot', 'IsDAX', 'IsHidden', 'IsOffline', 'IsReadOnly', 'IsShadowCopy', 'IsSystem']
+
+class SmbShares(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_key = 'Name'
+        self.display_key = "Description"
+        self.command += '"Get-SmbShare | ConvertTo-Json"'
+        self.keep_keys = ['Temporary', 'Special', 'ShadowCopy', 'SecurityDescriptor', 'Name', 'ShareType', 'ShareState', 'AvailabilityType', 'FolderEnumerationMode', 'DirectoryHandleLeasing', 'EncryptData', 'IdentityRemoting', 'IsolatedTransport', 'Path']
+
 
 class Printers(PowershellGenerator):
 
@@ -423,6 +422,10 @@ class Displays(PowershellGenerator):
         self.command += '"Get-CimInstance -ClassName CIM_Display | ConvertTo-Json"'
         self.keep_keys = ['Caption', 'Description', 'Name', 'Status', 'Availability', 'PNPDeviceID']
 
+    def process_fields(self, fields: Dict):
+        if fields['PNPDeviceID'] is None:
+            fields['PNPDeviceID'] = fields['Caption']
+
 
 class Users(PowershellGenerator):
 
@@ -477,6 +480,15 @@ class Drivers(PowershellGenerator):
                           'MinorVersion', 'Build', 'Revision', 'Path', 'Online', 'WinPath', 'SysDrivePath', 'LogPath',
                           'Version']
 
+class ComputerInfo(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.display_key = "OsName"
+        self.unique_key = "OsName"
+        self.command += '"Get-ComputerInfo | ConvertTo-Json"'
+        self.keep_keys = ['DeviceGuardUserModeCodeIntegrityPolicyEnforcementStatus', 'DeviceGuardCodeIntegrityPolicyEnforcementStatus', 'DeviceGuardSmartStatus', 'HyperVisorPresent', 'LogonServer', 'KeyboardLayout', 'OsStatus', 'OsRegisteredUser', 'OsSerialNumber', 'OsPrimary', 'OsPortableOperatingSystem', 'OsLanguage', 'OsManufacturer', 'OsMaxNumberOfProcesses', 'OsMaxProcessMemorySize', 'OsEncryptionLevel', 'OsDistributed', 'OsCodeSet', 'OsLocaleID', 'OsWindowsDirectory', 'OsSystemDrive', 'OsSystemDirectory', 'OsSystemDevice', 'OsBootDevice', 'OsBuildNumber', 'OsOperatingSystemSKU', 'OsType', 'CsWorkgroup', 'CsWakeUpType', 'CsUserName', 'CsPrimaryOwnerName', 'CsPartOfDomain', 'CsPowerOnPasswordStatus', 'CsManufacturer', 'CsBootupState', 'CsDomain', 'CsDNSHostName', 'CsBootROMSupported', 'CsAutomaticResetCapability', 'CsAutomaticResetBootOption', 'CsAutomaticManagedPagefile', 'CsAdminPasswordStatus', 'BiosVersion', 'BiosSystemBiosMajorVersion', 'BiosSystemBiosMinorVersion', 'BiosStatus', 'BiosSoftwareElementState', 'BiosSMBIOSPresent', 'BiosSMBIOSBIOSVersion', 'BiosSMBIOSMajorVersion', 'BiosSMBIOSMinorVersion', 'BiosSeralNumber', 'BiosManufacturer', 'BiosFirmwareType', 'BiosEmbeddedControllerMajorVersion', 'BiosEmbeddedControllerMinorVersion', 'WindowsVersion', 'OSDisplayVersion', 'WindowsProductId', 'WindowsBuildLabEx']
+
 
 class Keyboards(PowershellGenerator):
 
@@ -495,7 +507,14 @@ class EnvironmentVariables(Generator):
 
     def get(self):
         entries = []
-        for key, value in sorted(os.environ.items()):
+        fields = sorted(os.environ.items())
+        for key, value in fields:
+
+            if key.startswith("EFC_"):
+                split = re.split(r"_[a-z0-9]{4}$", key)
+                if split[0]:
+                    key = split[0]
+
             entry = Entry()
             entry.display_name = key
             entry.unique_name = key
@@ -507,6 +526,7 @@ class EnvironmentVariables(Generator):
 
         entries = sorted(entries, key=lambda x: x.display_name)
         self.entries = entries
+
 
 class DirListing(Generator):
 
@@ -680,17 +700,31 @@ if __name__ == '__main__':
     drives.run()
     executed.append(drives)
 
+    partitions = Partitions()
+    partitions.run()
+    executed.append(partitions)
+
+    smb_shares = SmbShares()
+    smb_shares.run()
+    executed.append(smb_shares)
+
     keyboards = Keyboards()
     keyboards.run()
     executed.append(keyboards)
+
+    driver_files = DriverFiles()
+    driver_files.run()
+    executed.append(driver_files)
+
+    computer_info = ComputerInfo()
+    computer_info.run()
+    executed.append(computer_info)
 
     programs = InstalledPrograms()
     programs.run()
     executed.append(programs)
 
-    driver_files = DriverFiles()
-    driver_files.run()
-    executed.append(driver_files)
+
 
     # drivers = Drivers()
     # drivers.run()
@@ -703,3 +737,6 @@ if __name__ == '__main__':
         has_diff = gen.added_entries or gen.removed_entries or gen.changed_data or None
         if has_diff:
             print(gen.name)
+
+    for gen in executed:
+        gen.write_results()
