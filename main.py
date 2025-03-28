@@ -11,6 +11,8 @@ USER_PATTERN = r"_[a-z0-9]{5}$"
 DATE = datetime.datetime.now().strftime("%Y-%m-%d")
 USER_PATH = Path(os.environ["USERPROFILE"])
 
+os.makedirs('results', exist_ok=True)
+
 class Entry:
 
     def __init__(self):
@@ -59,10 +61,11 @@ class Generator:
         return f"{self.name}.json"
 
     def load_previous(self):
-        if not os.path.exists(self.get_file_name()):
+        path = os.path.join('results', self.get_file_name())
+        if not os.path.exists(path):
             return
 
-        with open(self.get_file_name(), "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             json_entries = json.load(f)
 
         self.previous_entries = []
@@ -196,7 +199,8 @@ class Generator:
         html += "</body></html>"
 
         file_name = f"{self.name}.html"
-        with open(file_name, "w", encoding="utf-8") as f:
+        path = os.path.join('results', file_name)
+        with open(path, "w", encoding="utf-8") as f:
             f.write(html)
 
         json_out = []
@@ -209,7 +213,8 @@ class Generator:
             }
             json_out.append(entry)
 
-        with open(self.get_file_name(), "w", encoding="utf-8") as f:
+        path = os.path.join('results', self.get_file_name())
+        with open(path, "w", encoding="utf-8") as f:
             f.write(json.dumps(json_out, indent=4, sort_keys=True))
 
     def run(self):
@@ -771,11 +776,54 @@ if __name__ == '__main__':
 
     # Bluetooth
 
+    index_html = f"""<html><head>
+            <style>
+                body {{
+                    font-family: Sans-Serif;
+                    background: #191919;
+                    color: #ccc;
+                }}
+                h2 {{
+                    color: #4cc2ff;
+                    padding-top: 2em;
+                }}
+                .entry-block {{
+                    padding-left: 2em;
+                }}
+
+                li{{
+                    padding-bottom: 0.5em;
+                }}
+
+                .arrow{{
+                    color: #4cc2ff;
+                    font-weight: bold;
+                    font-size: 1.2em;
+                }}
+            </style>
+        </head>
+        <body>
+        <h1>Changes - {DATE}</h1>
+        <br>
+    """
+
     print("\n### CHANGED")
+    any_changed = False
     for gen in executed:
         has_diff = gen.added_entries or gen.removed_entries or gen.changed_data or None
         if has_diff:
+            any_changed = True
             print(gen.name)
+            index_html += f"<a href='./{gen.name}.html'><h2>{gen.name}</h2></a>"
+
+    index_html += "</body></html>"
+    p = os.path.join("results", "0index.html")
+    if any_changed:
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write(index_html)
+    else:
+        if os.path.exists(p):
+            os.remove(p)
 
     for gen in executed:
         gen.write_results()
