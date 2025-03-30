@@ -2,16 +2,69 @@ import datetime
 import json
 import os.path
 import re
+import sys
 import subprocess
 from html import escape
 from typing import List, Dict, Tuple, Optional, Any
 from pathlib import Path
+import ctypes
+import getpass
 
-USER_PATTERN = r"_[a-z0-9]{5}$"
+try:
+    IS_ADMIN = ctypes.windll.shell32.IsUserAnAdmin() == 1
+except Exception:
+    IS_ADMIN = False
+
+try:
+    USER_NAME = sys.argv[1]
+except IndexError:
+    USER_NAME = getpass.getuser()
+
+RESULTS_DIR_NAME = f"results_{USER_NAME}"
+USER_PATTERN = r"_[a-z0-9]{4,6}$"
 DATE = datetime.datetime.now().strftime("%Y-%m-%d")
-USER_PATH = Path(os.environ["USERPROFILE"])
+USER_PATH = Path(f"C:\\Users\\{USER_NAME}")
 
-os.makedirs('results', exist_ok=True)
+os.makedirs(RESULTS_DIR_NAME, exist_ok=True)
+
+def get_html_head(title, h1):
+    html = f"""<!DOCTYPE html>
+            <html>
+            <head>
+                <title>{escape(title)}</title>
+
+            <style>
+                body {{
+                    font-family: Sans-Serif;
+                    background: #191919;
+                    color: #ccc;
+                }}
+                
+                h2 {{
+                    color: #4cc2ff;
+                    padding-top: 2em;
+                }}
+                
+                .entry-block {{
+                    padding-left: 2em;
+                }}
+
+                li{{
+                    padding-bottom: 0.5em;
+                }}
+
+                .arrow{{
+                    color: #4cc2ff;
+                    font-weight: bold;
+                    font-size: 1.2em;
+                }}
+            </style>
+
+            </head>
+            <body>
+            <h1>{escape(h1)} - {DATE}</h1>
+"""
+    return html
 
 class Entry:
 
@@ -39,6 +92,7 @@ class Generator:
 
     def __init__(self):
         self.name = self.__class__.__name__
+        self.requires_admin = False
 
         self.fields = {}
         self.ignore_keys = []
@@ -61,7 +115,7 @@ class Generator:
         return f"{self.name}.json"
 
     def load_previous(self):
-        path = os.path.join('results', self.get_file_name())
+        path = os.path.join(RESULTS_DIR_NAME, self.get_file_name())
         if not os.path.exists(path):
             return
 
@@ -130,40 +184,7 @@ class Generator:
         return html
 
     def write_results(self):
-        html = f"""<!DOCTYPE html>
-        <html>
-        <head>
-            <title>{escape(self.name)}</title>
-        
-        <style>
-            body {{
-                font-family: Sans-Serif;
-                background: #191919;
-                color: #ccc;
-            }}
-            h2 {{
-                color: #4cc2ff;
-                padding-top: 2em;
-            }}
-            .entry-block {{
-                padding-left: 2em;
-            }}
-            
-            li{{
-                padding-bottom: 0.5em;
-            }}
-            
-            .arrow{{
-                color: #4cc2ff;
-                font-weight: bold;
-                font-size: 1.2em;
-            }}
-        </style>
-        
-        </head>
-        <body>
-        <h1>{escape(self.name)} - {DATE}</h1>
-"""
+        html = get_html_head(self.name, self.name)
         # TODO refactor. Add classes.
         # Added
         html += self.entry_block("Added", self.added_entries)
@@ -199,7 +220,7 @@ class Generator:
         html += "</body></html>"
 
         file_name = f"{self.name}.html"
-        path = os.path.join('results', file_name)
+        path = os.path.join(RESULTS_DIR_NAME, file_name)
         with open(path, "w", encoding="utf-8") as f:
             f.write(html)
 
@@ -213,7 +234,7 @@ class Generator:
             }
             json_out.append(entry)
 
-        path = os.path.join('results', self.get_file_name())
+        path = os.path.join(RESULTS_DIR_NAME, self.get_file_name())
         with open(path, "w", encoding="utf-8") as f:
             f.write(json.dumps(json_out, indent=4, sort_keys=True))
 
@@ -236,6 +257,9 @@ class PowershellGenerator(Generator):
         proc = subprocess.run(self.command, text=True, capture_output=True, check=False, encoding="utf-8")
         assert proc.returncode == 0, f"{proc.returncode}\n{proc.stdout}\n{proc.stderr}"
         items = json.loads(proc.stdout)
+
+        #items = json.load(open('temp.json', 'r', encoding='utf-16'))
+
         if isinstance(items, dict):
             items = [items]
 
@@ -256,19 +280,30 @@ class PowershellGenerator(Generator):
                     fields[key] = value
 
             entry = Entry()
-            entry.unique_name = item[self.unique_key]
+            if self.unique_key is None:
+                unique = self.get_unique_name(fields)
+            else:
+                unique = item[self.unique_key]
+            entry.unique_name = unique
+            assert entry.unique_name
 
             if entry.unique_name in unique_names:
+                import pdb
+                pdb.set_trace()
                 assert False, entry.unique_name
 
             unique_names.add(entry.unique_name)
 
             entry.display_name = item[self.display_key]
+            assert entry.display_name
             entry.fields = fields
             entries.append(entry)
 
         entries = sorted(entries, key=lambda x: x.display_name)
         self.entries = entries
+
+    def get_unique_name(self, fields):
+        raise NotImplementedError()
 
 
 class Services(PowershellGenerator):
@@ -312,9 +347,14 @@ class StartupPrograms(PowershellGenerator):
 
     def __init__(self):
         super().__init__()
+        self.unique_key = None
         self.command += '"Get-CimInstance Win32_StartupCommand | ConvertTo-Json"'
         self.keep_keys = ['Caption', 'Description', 'SettingID', 'Command', 'Location', 'Name', 'User', 'UserSID',
                           'PSComputerName']
+
+    @staticmethod
+    def get_unique_name(fields):
+        return f"{fields['Caption']}-{fields['User']}-{fields['Command']}"
 
 
 class PhysicalDisks(PowershellGenerator):
@@ -411,8 +451,8 @@ class VideoControllers(PowershellGenerator):
         self.unique_key = 'Caption'
         self.display_key = "Caption"
         self.command += '"Get-CimInstance -ClassName Win32_VideoController | ConvertTo-Json"'
-        self.keep_keys = ['Caption', 'Description', 'Name', 'Status', 'Availability', 'DeviceID', 'PNPDeviceID',
-                          'CurrentNumberOfColors', 'VideoMemoryType', 'VideoProcessor', 'AdapterCompatibility',
+        self.keep_keys = ['Caption', 'Description', 'Name', 'Status', 'DeviceID', 'PNPDeviceID',
+                        'VideoMemoryType', 'VideoProcessor', 'AdapterCompatibility',
                           'AdapterDACType', 'DriverDate', 'DriverVersion', 'InfFilename', 'InfSection']
 
 
@@ -469,8 +509,8 @@ class Devices(PowershellGenerator):
         super().__init__()
         self.unique_key = "DeviceID"
         self.command += '"Get-PnpDevice | ConvertTo-Json"'
-        self.keep_keys = ['Caption', 'Description', 'FriendlyName', 'InstanceId', 'Problem', 'InstallDate', 'Name',
-                          'Status', 'Availability', 'ConfigManagerUserConfig', 'DeviceID', 'PNPDeviceID', 'StatusInfo',
+        self.keep_keys = ['Caption', 'Description', 'FriendlyName', 'InstanceId', 'InstallDate', 'Name'
+                          , 'Availability', 'ConfigManagerUserConfig', 'DeviceID', 'PNPDeviceID', 'StatusInfo',
                           'HardwareID', 'Manufacturer', 'Service', 'PNPClass']
 
     def process_fields(self, fields: Dict):
@@ -486,13 +526,23 @@ class Drivers(PowershellGenerator):
 
     def __init__(self):
         super().__init__()
-        self.display_key = "ClassDescription"
-        self.unique_key = "Driver"
+        self.requires_admin = True
+        self.display_key = "Driver"
+        self.unique_key = "OriginalFileName"
         self.command += '"Get-WindowsDriver -Online -All | ConvertTo-Json"'
         self.keep_keys = ['Driver', 'OriginalFileName', 'Inbox', 'CatalogFile', 'ClassName', 'ClassGuid',
                           'ClassDescription', 'BootCritical', 'DriverSignature', 'ProviderName', 'Date', 'MajorVersion',
                           'MinorVersion', 'Build', 'Revision', 'Path', 'Online', 'WinPath', 'SysDrivePath', 'LogPath',
                           'Version']
+
+class Tpm(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.requires_admin = True
+        self.display_key = "ManufacturerIdTxt"
+        self.unique_key = "ManufacturerIdTxt"
+        self.command += '"Get-Tpm | ConvertTo-Json"'
 
 class ComputerInfo(PowershellGenerator):
 
@@ -511,6 +561,10 @@ class OsConfig(PowershellGenerator):
         self.unique_key = "SourceId"
         self.command += '"Get-OSConfiguration | ConvertTo-Json"'
         self.keep_keys = ['SourceId', 'FriendlyName']
+
+    def process_fields(self, fields: Dict):
+        if not fields['FriendlyName']:
+            fields['FriendlyName'] = fields['SourceId']
 
 class Tasks(PowershellGenerator):
 
@@ -552,7 +606,7 @@ class EnvironmentVariables(Generator):
         for key, value in fields:
 
             if key.startswith("EFC_"):
-                split = re.split(r"_[a-z0-9]{4}$", key)
+                split = re.split(USER_PATTERN, key)
                 if split[0]:
                     key = split[0]
 
@@ -685,6 +739,14 @@ if __name__ == '__main__':
     program_data.run()
     executed.append(program_data)
 
+    driver_files = DriverFiles()
+    driver_files.run()
+    executed.append(driver_files)
+
+    env_vars = EnvironmentVariables()
+    env_vars.run()
+    executed.append(env_vars)
+
     groups = Groups()
     groups.run()
     executed.append(groups)
@@ -705,6 +767,10 @@ if __name__ == '__main__':
     displays.run()
     executed.append(displays)
 
+    keyboards = Keyboards()
+    keyboards.run()
+    executed.append(keyboards)
+
     pointing_devices = PointingDevices()
     pointing_devices.run()
     executed.append(pointing_devices)
@@ -716,10 +782,6 @@ if __name__ == '__main__':
     printers = Printers()
     printers.run()
     executed.append(printers)
-
-    env_vars = EnvironmentVariables()
-    env_vars.run()
-    executed.append(env_vars)
 
     services = Services()
     services.run()
@@ -749,13 +811,13 @@ if __name__ == '__main__':
     smb_shares.run()
     executed.append(smb_shares)
 
-    keyboards = Keyboards()
-    keyboards.run()
-    executed.append(keyboards)
+    tasks = Tasks()
+    tasks.run()
+    executed.append(tasks)
 
-    driver_files = DriverFiles()
-    driver_files.run()
-    executed.append(driver_files)
+    firewall_rules = FirewallRules()
+    firewall_rules.run()
+    executed.append(firewall_rules)
 
     computer_info = ComputerInfo()
     computer_info.run()
@@ -765,14 +827,6 @@ if __name__ == '__main__':
     os_config.run()
     executed.append(os_config)
 
-    tasks = Tasks()
-    tasks.run()
-    executed.append(tasks)
-
-    firewall_rules = FirewallRules()
-    firewall_rules.run()
-    executed.append(firewall_rules)
-
     programs = InstalledPrograms()
     programs.run()
     executed.append(programs)
@@ -781,42 +835,18 @@ if __name__ == '__main__':
     appx.run()
     executed.append(appx)
 
-    # drivers = Drivers()
-    # drivers.run()
-    # executed.append(drivers)
+    if IS_ADMIN:
+        drivers = Drivers()
+        drivers.run()
+        executed.append(drivers)
+
+        tpm = Tpm()
+        tpm.run()
+        executed.append(tpm)
 
     # Bluetooth
 
-    index_html = f"""<html><head>
-            <style>
-                body {{
-                    font-family: Sans-Serif;
-                    background: #191919;
-                    color: #ccc;
-                }}
-                h2 {{
-                    color: #4cc2ff;
-                    padding-top: 2em;
-                }}
-                .entry-block {{
-                    padding-left: 2em;
-                }}
-
-                li{{
-                    padding-bottom: 0.5em;
-                }}
-
-                .arrow{{
-                    color: #4cc2ff;
-                    font-weight: bold;
-                    font-size: 1.2em;
-                }}
-            </style>
-        </head>
-        <body>
-        <h1>Changes - {DATE}</h1>
-        <br>
-    """
+    index_html = get_html_head("Changes", "Changes")
 
     print("\n### CHANGED")
     any_changed = False
@@ -826,9 +856,8 @@ if __name__ == '__main__':
             any_changed = True
             print(gen.name)
             index_html += f"<a href='./{gen.name}.html'><h2>{gen.name}</h2></a>"
-
     index_html += "</body></html>"
-    p = os.path.join("results", "0index.html")
+    p = os.path.join(RESULTS_DIR_NAME, "0index.html")
     if any_changed:
         with open(p, 'w', encoding='utf-8') as f:
             f.write(index_html)
@@ -838,3 +867,7 @@ if __name__ == '__main__':
 
     for gen in executed:
         gen.write_results()
+
+    print("")
+    print(USER_NAME)
+    print(f"is_admin: {IS_ADMIN}")
