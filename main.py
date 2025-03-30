@@ -535,6 +535,25 @@ class Drivers(PowershellGenerator):
                           'MinorVersion', 'Build', 'Revision', 'Path', 'Online', 'WinPath', 'SysDrivePath', 'LogPath',
                           'Version']
 
+class BitLocker(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.requires_admin = True
+        self.display_key = "MountPoint"
+        self.unique_key = "MountPoint"
+        self.command += '"Get-BitLockerVolume | ConvertTo-Json"'
+
+class FileShares(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.requires_admin = True
+        self.display_key = "Name"
+        self.unique_key = "UniqueId"
+        self.command += '"Get-FileShare | ConvertTo-Json"'
+        self.keep_keys = ['HealthStatus', 'OperationalStatus', 'ShareState', 'FileSharingProtocol', 'ObjectId', 'UniqueId', 'ContinuouslyAvailable', 'Description', 'EncryptData', 'Name', 'VolumeRelativePath']
+
 class Tpm(PowershellGenerator):
 
     def __init__(self):
@@ -631,6 +650,10 @@ class DirListing(Generator):
 
     def get(self):
         entries = []
+        if not os.path.exists(self.path):
+            self.entries = []
+            return
+        
         for name in os.listdir(self.path):
             entry = Entry()
             entry.display_name = name
@@ -836,6 +859,10 @@ if __name__ == '__main__':
     executed.append(appx)
 
     if IS_ADMIN:
+        file_shares = FileShares()
+        file_shares.run()
+        executed.append(file_shares)
+
         drivers = Drivers()
         drivers.run()
         executed.append(drivers)
@@ -844,7 +871,9 @@ if __name__ == '__main__':
         tpm.run()
         executed.append(tpm)
 
-    # Bluetooth
+        bit_locker = BitLocker()
+        bit_locker.run()
+        executed.append(bit_locker)
 
     index_html = get_html_head("Changes", "Changes")
 
