@@ -1,14 +1,15 @@
-import datetime
-import json
-import os.path
-import re
-import sys
-import subprocess
-from html import escape
-from typing import List, Dict, Tuple, Optional, Any
-from pathlib import Path
 import ctypes
+import datetime
 import getpass
+import json
+import os
+import re
+import subprocess
+import sys
+from abc import ABCMeta
+from html import escape
+from pathlib import Path
+from typing import List, Dict, Tuple, Optional, Any
 
 try:
     IS_ADMIN = ctypes.windll.shell32.IsUserAnAdmin() == 1
@@ -25,7 +26,6 @@ USER_PATTERN = r"_[a-z0-9]{4,6}$"
 DATE = datetime.datetime.now().strftime("%Y-%m-%d")
 USER_PATH = Path(f"C:\\Users\\{USER_NAME}")
 
-os.makedirs(RESULTS_DIR_NAME, exist_ok=True)
 
 def get_html_head(title, h1):
     html = f"""<!DOCTYPE html>
@@ -66,6 +66,7 @@ def get_html_head(title, h1):
 """
     return html
 
+
 class Entry:
 
     def __init__(self):
@@ -88,7 +89,7 @@ class Changed:
         return f"<Entry - {self.display_name} - {self.unique_name}>"
 
 
-class Generator:
+class Generator(metaclass=ABCMeta):
 
     def __init__(self):
         self.name = self.__class__.__name__
@@ -105,6 +106,9 @@ class Generator:
         self.removed_entries: List[Entry] = []
         self.changed_data: List = []
 
+    def __repr__(self):
+        return f"<Generator - {self.name}>"
+
     def get(self):
         raise NotImplementedError()
 
@@ -113,6 +117,9 @@ class Generator:
 
     def get_file_name(self):
         return f"{self.name}.json"
+
+    def get_html_name(self):
+        return f"{self.name}.html"
 
     def load_previous(self):
         path = os.path.join(RESULTS_DIR_NAME, self.get_file_name())
@@ -219,8 +226,7 @@ class Generator:
         # End
         html += "</body></html>"
 
-        file_name = f"{self.name}.html"
-        path = os.path.join(RESULTS_DIR_NAME, file_name)
+        path = os.path.join(RESULTS_DIR_NAME, self.get_html_name())
         with open(path, "w", encoding="utf-8") as f:
             f.write(html)
 
@@ -237,6 +243,10 @@ class Generator:
         path = os.path.join(RESULTS_DIR_NAME, self.get_file_name())
         with open(path, "w", encoding="utf-8") as f:
             f.write(json.dumps(json_out, indent=4, sort_keys=True))
+
+    def has_diff(self) -> bool:
+        diff = self.added_entries or self.removed_entries or self.changed_data or None
+        return bool(diff)
 
     def run(self):
         print(f"{self.name}...")
@@ -257,8 +267,6 @@ class PowershellGenerator(Generator):
         proc = subprocess.run(self.command, text=True, capture_output=True, check=False, encoding="utf-8")
         assert proc.returncode == 0, f"{proc.returncode}\n{proc.stdout}\n{proc.stderr}"
         items = json.loads(proc.stdout)
-
-        #items = json.load(open('temp.json', 'r', encoding='utf-16'))
 
         if isinstance(items, dict):
             items = [items]
@@ -302,7 +310,7 @@ class PowershellGenerator(Generator):
         entries = sorted(entries, key=lambda x: x.display_name)
         self.entries = entries
 
-    def get_unique_name(self, fields):
+    def get_unique_name(self, fields: dict):
         raise NotImplementedError()
 
 
@@ -333,6 +341,7 @@ class InstalledPrograms(PowershellGenerator):
                           'InstallSource', 'InstallState', 'Name', 'LocalPackage', 'PackageCode', 'PackageName',
                           'Vendor', 'Version']
 
+
 class InstalledProgramsAppx(PowershellGenerator):
 
     def __init__(self):
@@ -340,7 +349,8 @@ class InstalledProgramsAppx(PowershellGenerator):
         self.display_key = "Name"
         self.unique_key = "PackageFullName"
         self.command += '"Get-AppxPackage | ConvertTo-Json"'
-        self.keep_keys = ['Status', 'SignatureKind', 'IsPartiallyStaged', 'NonRemovable', 'Version', 'InstallLocation', 'PackageFullName', 'PackageFamilyName', 'ResourceId', 'PublisherId', 'Name', 'Publisher']
+        self.keep_keys = ['Status', 'SignatureKind', 'IsPartiallyStaged', 'NonRemovable', 'Version', 'InstallLocation',
+                          'PackageFullName', 'PackageFamilyName', 'ResourceId', 'PublisherId', 'Name', 'Publisher']
 
 
 class StartupPrograms(PowershellGenerator):
@@ -352,8 +362,7 @@ class StartupPrograms(PowershellGenerator):
         self.keep_keys = ['Caption', 'Description', 'SettingID', 'Command', 'Location', 'Name', 'User', 'UserSID',
                           'PSComputerName']
 
-    @staticmethod
-    def get_unique_name(fields):
+    def get_unique_name(self, fields: dict):
         return f"{fields['Caption']}-{fields['User']}-{fields['Command']}"
 
 
@@ -379,6 +388,7 @@ class Disks(PowershellGenerator):
         self.keep_keys = ['OperationalStatus', 'HealthStatus', 'BusType', 'UniqueId', 'FriendlyName', 'Model',
                           'SerialNumber', 'AllocatedSize', 'FirmwareVersion']
 
+
 class Drives(PowershellGenerator):
 
     def __init__(self):
@@ -388,6 +398,7 @@ class Drives(PowershellGenerator):
         self.command += '"Get-PSDrive | ConvertTo-Json"'
         self.keep_keys = ['Name', 'Root', 'Description']
 
+
 class Partitions(PowershellGenerator):
 
     def __init__(self):
@@ -395,7 +406,10 @@ class Partitions(PowershellGenerator):
         self.unique_key = 'Guid'
         self.display_key = "Guid"
         self.command += '"Get-Partition | ConvertTo-Json"'
-        self.keep_keys = ['Guid', 'Size', 'PartitionNumber', 'Offset', 'IsActive', 'GptType', 'DiskNumber', 'UniqueId', 'Type', 'OperationalStatus', 'DiskId', 'UniqueId', 'IsActive', 'IsBoot', 'IsDAX', 'IsHidden', 'IsOffline', 'IsReadOnly', 'IsShadowCopy', 'IsSystem']
+        self.keep_keys = ['Guid', 'Size', 'PartitionNumber', 'Offset', 'IsActive', 'GptType', 'DiskNumber', 'UniqueId',
+                          'Type', 'OperationalStatus', 'DiskId', 'UniqueId', 'IsActive', 'IsBoot', 'IsDAX', 'IsHidden',
+                          'IsOffline', 'IsReadOnly', 'IsShadowCopy', 'IsSystem']
+
 
 class SmbShares(PowershellGenerator):
 
@@ -404,7 +418,9 @@ class SmbShares(PowershellGenerator):
         self.unique_key = 'Name'
         self.display_key = "Description"
         self.command += '"Get-SmbShare | ConvertTo-Json"'
-        self.keep_keys = ['Temporary', 'Special', 'ShadowCopy', 'SecurityDescriptor', 'Name', 'ShareType', 'ShareState', 'AvailabilityType', 'FolderEnumerationMode', 'DirectoryHandleLeasing', 'EncryptData', 'IdentityRemoting', 'IsolatedTransport', 'Path']
+        self.keep_keys = ['Temporary', 'Special', 'ShadowCopy', 'SecurityDescriptor', 'Name', 'ShareType', 'ShareState',
+                          'AvailabilityType', 'FolderEnumerationMode', 'DirectoryHandleLeasing', 'EncryptData',
+                          'IdentityRemoting', 'IsolatedTransport', 'Path']
 
 
 class Printers(PowershellGenerator):
@@ -452,7 +468,7 @@ class VideoControllers(PowershellGenerator):
         self.display_key = "Caption"
         self.command += '"Get-CimInstance -ClassName Win32_VideoController | ConvertTo-Json"'
         self.keep_keys = ['Caption', 'Description', 'Name', 'Status', 'DeviceID', 'PNPDeviceID',
-                        'VideoMemoryType', 'VideoProcessor', 'AdapterCompatibility',
+                          'VideoMemoryType', 'VideoProcessor', 'AdapterCompatibility',
                           'AdapterDACType', 'DriverDate', 'DriverVersion', 'InfFilename', 'InfSection']
 
 
@@ -510,7 +526,7 @@ class Devices(PowershellGenerator):
         self.unique_key = "DeviceID"
         self.command += '"Get-PnpDevice | ConvertTo-Json"'
         self.keep_keys = ['Caption', 'Description', 'FriendlyName', 'InstanceId', 'InstallDate', 'Name'
-                          , 'Availability', 'ConfigManagerUserConfig', 'DeviceID', 'PNPDeviceID', 'StatusInfo',
+            , 'Availability', 'ConfigManagerUserConfig', 'DeviceID', 'PNPDeviceID', 'StatusInfo',
                           'HardwareID', 'Manufacturer', 'Service', 'PNPClass']
 
     def process_fields(self, fields: Dict):
@@ -535,6 +551,7 @@ class Drivers(PowershellGenerator):
                           'MinorVersion', 'Build', 'Revision', 'Path', 'Online', 'WinPath', 'SysDrivePath', 'LogPath',
                           'Version']
 
+
 class BitLocker(PowershellGenerator):
 
     def __init__(self):
@@ -544,6 +561,7 @@ class BitLocker(PowershellGenerator):
         self.unique_key = "MountPoint"
         self.command += '"Get-BitLockerVolume | ConvertTo-Json"'
 
+
 class FileShares(PowershellGenerator):
 
     def __init__(self):
@@ -552,7 +570,10 @@ class FileShares(PowershellGenerator):
         self.display_key = "Name"
         self.unique_key = "UniqueId"
         self.command += '"Get-FileShare | ConvertTo-Json"'
-        self.keep_keys = ['HealthStatus', 'OperationalStatus', 'ShareState', 'FileSharingProtocol', 'ObjectId', 'UniqueId', 'ContinuouslyAvailable', 'Description', 'EncryptData', 'Name', 'VolumeRelativePath']
+        self.keep_keys = ['HealthStatus', 'OperationalStatus', 'ShareState', 'FileSharingProtocol', 'ObjectId',
+                          'UniqueId', 'ContinuouslyAvailable', 'Description', 'EncryptData', 'Name',
+                          'VolumeRelativePath']
+
 
 class Tpm(PowershellGenerator):
 
@@ -563,6 +584,7 @@ class Tpm(PowershellGenerator):
         self.unique_key = "ManufacturerIdTxt"
         self.command += '"Get-Tpm | ConvertTo-Json"'
 
+
 class ComputerInfo(PowershellGenerator):
 
     def __init__(self):
@@ -570,7 +592,24 @@ class ComputerInfo(PowershellGenerator):
         self.display_key = "OsName"
         self.unique_key = "OsName"
         self.command += '"Get-ComputerInfo | ConvertTo-Json"'
-        self.keep_keys = ['DeviceGuardUserModeCodeIntegrityPolicyEnforcementStatus', 'DeviceGuardCodeIntegrityPolicyEnforcementStatus', 'DeviceGuardSmartStatus', 'HyperVisorPresent', 'LogonServer', 'KeyboardLayout', 'OsStatus', 'OsRegisteredUser', 'OsSerialNumber', 'OsPrimary', 'OsPortableOperatingSystem', 'OsLanguage', 'OsManufacturer', 'OsMaxNumberOfProcesses', 'OsMaxProcessMemorySize', 'OsEncryptionLevel', 'OsDistributed', 'OsCodeSet', 'OsLocaleID', 'OsWindowsDirectory', 'OsSystemDrive', 'OsSystemDirectory', 'OsSystemDevice', 'OsBootDevice', 'OsBuildNumber', 'OsOperatingSystemSKU', 'OsType', 'CsWorkgroup', 'CsWakeUpType', 'CsUserName', 'CsPrimaryOwnerName', 'CsPartOfDomain', 'CsPowerOnPasswordStatus', 'CsManufacturer', 'CsBootupState', 'CsDomain', 'CsDNSHostName', 'CsBootROMSupported', 'CsAutomaticResetCapability', 'CsAutomaticResetBootOption', 'CsAutomaticManagedPagefile', 'CsAdminPasswordStatus', 'BiosVersion', 'BiosSystemBiosMajorVersion', 'BiosSystemBiosMinorVersion', 'BiosStatus', 'BiosSoftwareElementState', 'BiosSMBIOSPresent', 'BiosSMBIOSBIOSVersion', 'BiosSMBIOSMajorVersion', 'BiosSMBIOSMinorVersion', 'BiosSeralNumber', 'BiosManufacturer', 'BiosFirmwareType', 'BiosEmbeddedControllerMajorVersion', 'BiosEmbeddedControllerMinorVersion', 'WindowsVersion', 'OSDisplayVersion', 'WindowsProductId', 'WindowsBuildLabEx']
+        self.keep_keys = ['DeviceGuardUserModeCodeIntegrityPolicyEnforcementStatus',
+                          'DeviceGuardCodeIntegrityPolicyEnforcementStatus', 'DeviceGuardSmartStatus',
+                          'HyperVisorPresent', 'LogonServer', 'KeyboardLayout', 'OsStatus', 'OsRegisteredUser',
+                          'OsSerialNumber', 'OsPrimary', 'OsPortableOperatingSystem', 'OsLanguage', 'OsManufacturer',
+                          'OsMaxNumberOfProcesses', 'OsMaxProcessMemorySize', 'OsEncryptionLevel', 'OsDistributed',
+                          'OsCodeSet', 'OsLocaleID', 'OsWindowsDirectory', 'OsSystemDrive', 'OsSystemDirectory',
+                          'OsSystemDevice', 'OsBootDevice', 'OsBuildNumber', 'OsOperatingSystemSKU', 'OsType',
+                          'CsWorkgroup', 'CsWakeUpType', 'CsUserName', 'CsPrimaryOwnerName', 'CsPartOfDomain',
+                          'CsPowerOnPasswordStatus', 'CsManufacturer', 'CsBootupState', 'CsDomain', 'CsDNSHostName',
+                          'CsBootROMSupported', 'CsAutomaticResetCapability', 'CsAutomaticResetBootOption',
+                          'CsAutomaticManagedPagefile', 'CsAdminPasswordStatus', 'BiosVersion',
+                          'BiosSystemBiosMajorVersion', 'BiosSystemBiosMinorVersion', 'BiosStatus',
+                          'BiosSoftwareElementState', 'BiosSMBIOSPresent', 'BiosSMBIOSBIOSVersion',
+                          'BiosSMBIOSMajorVersion', 'BiosSMBIOSMinorVersion', 'BiosSeralNumber', 'BiosManufacturer',
+                          'BiosFirmwareType', 'BiosEmbeddedControllerMajorVersion',
+                          'BiosEmbeddedControllerMinorVersion', 'WindowsVersion', 'OSDisplayVersion',
+                          'WindowsProductId', 'WindowsBuildLabEx']
+
 
 class OsConfig(PowershellGenerator):
 
@@ -585,6 +624,7 @@ class OsConfig(PowershellGenerator):
         if not fields['FriendlyName']:
             fields['FriendlyName'] = fields['SourceId']
 
+
 class Tasks(PowershellGenerator):
 
     def __init__(self):
@@ -594,6 +634,7 @@ class Tasks(PowershellGenerator):
         self.command += '"Get-ScheduledTask | Select-Object URI, TaskName, SecurityDescriptor, Author, State, Triggers | ConvertTo-Json"'
         self.keep_keys = ['TaskName', 'URI', 'SecurityDescriptor', 'Author', 'State', 'Triggers']
 
+
 class FirewallRules(PowershellGenerator):
 
     def __init__(self):
@@ -601,7 +642,11 @@ class FirewallRules(PowershellGenerator):
         self.display_key = "DisplayName"
         self.unique_key = "ID"
         self.command += '"Get-NetFirewallRule | ConvertTo-Json"'
-        self.keep_keys = ['Name', 'ID', 'DisplayName', 'Group', 'Enabled', 'Profile', 'Direction', 'Action', 'Status' ,'EdgeTraversalPolicy', 'LSM', 'PrimaryStatus', 'EnforcementStatus', 'PolicyStoreSourceType', 'InstanceID', 'PolicyDecisionStrategy', 'ConditionListType', 'ExecutionStrategy', 'SequencedActions', 'DisplayGroup', 'Owner', 'PolicyStoreSource', 'Profiles', 'RuleGroup', 'StatusCode']
+        self.keep_keys = ['Name', 'ID', 'DisplayName', 'Group', 'Enabled', 'Profile', 'Direction', 'Action', 'Status',
+                          'EdgeTraversalPolicy', 'LSM', 'PrimaryStatus', 'EnforcementStatus', 'PolicyStoreSourceType',
+                          'InstanceID', 'PolicyDecisionStrategy', 'ConditionListType', 'ExecutionStrategy',
+                          'SequencedActions', 'DisplayGroup', 'Owner', 'PolicyStoreSource', 'Profiles', 'RuleGroup',
+                          'StatusCode']
 
 
 class Keyboards(PowershellGenerator):
@@ -653,7 +698,7 @@ class DirListing(Generator):
         if not os.path.exists(self.path):
             self.entries = []
             return
-        
+
         for name in os.listdir(self.path):
             entry = Entry()
             entry.display_name = name
@@ -667,11 +712,13 @@ class DirListing(Generator):
         entries = sorted(entries, key=lambda x: x.display_name)
         self.entries = entries
 
+
 class AppDataLocal(DirListing):
 
     def __init__(self):
         super().__init__()
         self.path = USER_PATH / "AppData" / "Local"
+
 
 class AppDataLocalLow(DirListing):
 
@@ -679,11 +726,13 @@ class AppDataLocalLow(DirListing):
         super().__init__()
         self.path = USER_PATH / "AppData" / "LocalLow"
 
+
 class AppDataRoaming(DirListing):
 
     def __init__(self):
         super().__init__()
         self.path = USER_PATH / "AppData" / "Roaming"
+
 
 class ProgramData(DirListing):
 
@@ -691,11 +740,13 @@ class ProgramData(DirListing):
         super().__init__()
         self.path = "C:\\ProgramData"
 
+
 class ProgramFiles(DirListing):
 
     def __init__(self):
         super().__init__()
         self.path = "C:\\Program Files"
+
 
 class ProgramFilesx86(DirListing):
 
@@ -703,17 +754,20 @@ class ProgramFilesx86(DirListing):
         super().__init__()
         self.path = "C:\\Program Files (x86)"
 
+
 class Windows(DirListing):
 
     def __init__(self):
         super().__init__()
         self.path = "C:\\Windows"
 
+
 class System32(DirListing):
 
     def __init__(self):
         super().__init__()
         self.path = "C:\\Windows\\System32"
+
 
 class DriverFiles(DirListing):
 
@@ -722,169 +776,75 @@ class DriverFiles(DirListing):
         self.path = "C:\\Windows\\System32\\drivers"
 
 
-if __name__ == '__main__':
+ALL_GENERATORS_CLS = [
+    Devices,
+    System32,
+    Windows,
+    ProgramFiles,
+    ProgramFilesx86,
+    AppDataLocal,
+    AppDataLocalLow,
+    AppDataRoaming,
+    ProgramData,
+    DriverFiles,
+    EnvironmentVariables,
+    Groups,
+    Users,
+    SoundDevices,
+    VideoControllers,
+    Displays,
+    Keyboards,
+    PointingDevices,
+    NetworkAdapters,
+    Printers,
+    Services,
+    StartupPrograms,
+    Disks,
+    PhysicalDisks,
+    Drives,
+    Partitions,
+    SmbShares,
+    Tasks,
+    FirewallRules,
+    ComputerInfo,
+    OsConfig,
+    InstalledPrograms,
+    InstalledProgramsAppx,
+    FileShares,
+    Drivers,
+    Tpm,
+    BitLocker,
+]
 
+ALL_GENERATORS: List[Generator] = [generator() for generator in ALL_GENERATORS_CLS]
+
+
+def execute_generators():
     executed = []
 
-    devices = Devices()
-    devices.run()
-    executed.append(devices)
+    for generator in ALL_GENERATORS:
+        if generator.requires_admin and not IS_ADMIN:
+            continue
 
-    system32 = System32()
-    system32.run()
-    executed.append(system32)
+        generator.run()
+        executed.append(generator)
 
-    windows = Windows()
-    windows.run()
-    executed.append(windows)
+    return executed
 
-    program_files = ProgramFiles()
-    program_files.run()
-    executed.append(program_files)
 
-    program_files_x86 = ProgramFilesx86()
-    program_files_x86.run()
-    executed.append(program_files_x86)
-
-    appdata_local = AppDataLocal()
-    appdata_local.run()
-    executed.append(appdata_local)
-
-    appdata_local_low = AppDataLocalLow()
-    appdata_local_low.run()
-    executed.append(appdata_local_low)
-
-    appdata_roaming = AppDataRoaming()
-    appdata_roaming.run()
-    executed.append(appdata_roaming)
-
-    program_data = ProgramData()
-    program_data.run()
-    executed.append(program_data)
-
-    driver_files = DriverFiles()
-    driver_files.run()
-    executed.append(driver_files)
-
-    env_vars = EnvironmentVariables()
-    env_vars.run()
-    executed.append(env_vars)
-
-    groups = Groups()
-    groups.run()
-    executed.append(groups)
-
-    users = Users()
-    users.run()
-    executed.append(users)
-
-    sound = SoundDevices()
-    sound.run()
-    executed.append(sound)
-
-    video = VideoControllers()
-    video.run()
-    executed.append(video)
-
-    displays = Displays()
-    displays.run()
-    executed.append(displays)
-
-    keyboards = Keyboards()
-    keyboards.run()
-    executed.append(keyboards)
-
-    pointing_devices = PointingDevices()
-    pointing_devices.run()
-    executed.append(pointing_devices)
-
-    network_adapters = NetworkAdapters()
-    network_adapters.run()
-    executed.append(network_adapters)
-
-    printers = Printers()
-    printers.run()
-    executed.append(printers)
-
-    services = Services()
-    services.run()
-    executed.append(services)
-
-    startup = StartupPrograms()
-    startup.run()
-    executed.append(startup)
-
-    disks = Disks()
-    disks.run()
-    executed.append(disks)
-
-    physical_disks = PhysicalDisks()
-    physical_disks.run()
-    executed.append(physical_disks)
-
-    drives = Drives()
-    drives.run()
-    executed.append(drives)
-
-    partitions = Partitions()
-    partitions.run()
-    executed.append(partitions)
-
-    smb_shares = SmbShares()
-    smb_shares.run()
-    executed.append(smb_shares)
-
-    tasks = Tasks()
-    tasks.run()
-    executed.append(tasks)
-
-    firewall_rules = FirewallRules()
-    firewall_rules.run()
-    executed.append(firewall_rules)
-
-    computer_info = ComputerInfo()
-    computer_info.run()
-    executed.append(computer_info)
-
-    os_config = OsConfig()
-    os_config.run()
-    executed.append(os_config)
-
-    programs = InstalledPrograms()
-    programs.run()
-    executed.append(programs)
-
-    appx = InstalledProgramsAppx()
-    appx.run()
-    executed.append(appx)
-
-    if IS_ADMIN:
-        file_shares = FileShares()
-        file_shares.run()
-        executed.append(file_shares)
-
-        drivers = Drivers()
-        drivers.run()
-        executed.append(drivers)
-
-        tpm = Tpm()
-        tpm.run()
-        executed.append(tpm)
-
-        bit_locker = BitLocker()
-        bit_locker.run()
-        executed.append(bit_locker)
+def run():
+    os.makedirs(RESULTS_DIR_NAME, exist_ok=True)
+    executed = execute_generators()
 
     index_html = get_html_head("Changes", "Changes")
 
     print("\n### CHANGED")
     any_changed = False
-    for gen in executed:
-        has_diff = gen.added_entries or gen.removed_entries or gen.changed_data or None
-        if has_diff:
+    for generator in executed:
+        if generator.has_diff():
             any_changed = True
-            print(gen.name)
-            index_html += f"<a href='./{gen.name}.html'><h2>{gen.name}</h2></a>"
+            print(generator.name)
+            index_html += f"<a href='./{generator.get_html_name()}'><h2>{generator.name}</h2></a>"
     index_html += "</body></html>"
     p = os.path.join(RESULTS_DIR_NAME, "0index.html")
     if any_changed:
@@ -898,5 +858,9 @@ if __name__ == '__main__':
         gen.write_results()
 
     print("")
-    print(USER_NAME)
+    print(f"user: {USER_NAME}")
     print(f"is_admin: {IS_ADMIN}")
+
+
+if __name__ == '__main__':
+    run()
