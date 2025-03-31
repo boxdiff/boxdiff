@@ -4,7 +4,8 @@
 
 A simple, dependency free, Python script that gives you a "diff" of your box by showing you what was added, removed, 
 or changed. It outputs the results to html.  
-It just executes several powershell commands and directory listings.
+It just executes several powershell commands and directory listings.  
+Tested on Windows 11.  Other platforms not supported.
 
 It's designed, and meant to remain, simple and easy to maintain long term. No dependencies, no gui.  
 Feel free to fork if you need major changes.
@@ -40,9 +41,10 @@ It's easily extendable while not complicating the main script.
 `sample_plugin.py` has different examples of what's possible.  
 Copy `sample_plugin.py` as `plugin.py` and rerun.
 
-## 💻 Cross Platform Support
+## 💻 Platform Support
 
-None and not planned.
+Windows only (tested on Windows 11).  
+Support for other platforms is not planned.
 
 ## 📜 License
 
