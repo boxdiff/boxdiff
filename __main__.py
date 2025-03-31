@@ -25,6 +25,7 @@ RESULTS_DIR_NAME = f"results_{USER_NAME}"
 USER_PATTERN = r"_[a-z0-9]{4,6}$"
 DATE = datetime.datetime.now().strftime("%Y-%m-%d")
 USER_PATH = Path(f"C:\\Users\\{USER_NAME}")
+INDEX_NAME = "0index.html"
 
 
 def get_html_head(title, h1):
@@ -673,21 +674,23 @@ class EnvironmentVariables(Generator):
 
     def get(self):
         entries = []
-        fields = sorted(os.environ.items())
-        for key, value in fields:
-
-            if key.startswith("EFC_"):
-                split = re.split(USER_PATTERN, key)
-                if split[0]:
-                    key = split[0]
-
-            entry = Entry()
-            entry.display_name = key
-            entry.unique_name = key
-            entry.fields = {
+        items = sorted(os.environ.items())
+        for key, value in items:
+            fields = {
                 "name": key,
                 "value": value
             }
+            self.process_fields(fields)
+
+            if fields['name'].startswith("EFC_"):
+                split = re.split(USER_PATTERN, fields['name'])
+                if split[0]:
+                    fields['name'] = split[0]
+
+            entry = Entry()
+            entry.display_name = fields['name']
+            entry.unique_name = fields['name']
+            entry.fields = fields
             entries.append(entry)
 
         entries = sorted(entries, key=lambda x: x.display_name)
@@ -707,13 +710,16 @@ class DirListing(Generator):
             return
 
         for name in os.listdir(self.path):
-            entry = Entry()
-            entry.display_name = name
-            entry.unique_name = name
-            entry.fields = {
+            fields = {
                 "name": name,
                 "value": None
             }
+            self.process_fields(fields)
+
+            entry = Entry()
+            entry.display_name = fields['name']
+            entry.unique_name = fields['name']
+            entry.fields = fields
             entries.append(entry)
 
         entries = sorted(entries, key=lambda x: x.display_name)
@@ -851,7 +857,7 @@ def run():
             print(generator.name)
             index_html += f"<a href='./{generator.get_html_name()}'><h2>{generator.name}</h2></a>"
     index_html += "</body></html>"
-    p = os.path.join(RESULTS_DIR_NAME, "0index.html")
+    p = os.path.join(RESULTS_DIR_NAME, INDEX_NAME)
     if any_changed:
         with open(p, 'w', encoding='utf-8') as f:
             f.write(index_html)
