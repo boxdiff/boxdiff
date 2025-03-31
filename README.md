@@ -1,4 +1,4 @@
-# BoxDiff
+# BoxDiff - Diff your Box
 
 ## 💎 About
 
@@ -9,7 +9,7 @@ It just executes several powershell commands and directory listings.
 It's designed, and meant to remain, simple and easy to maintain long term. No dependencies, no gui.  
 Feel free to fork if you need major changes.
 
-[Discord](https://discord.gg/2NCr2eSa)
+[Discord](https://discord.gg/JdrGQKqAUe)
 
 ## 📖 How to Use
 
