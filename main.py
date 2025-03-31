@@ -95,7 +95,6 @@ class Generator(metaclass=ABCMeta):
         self.name = self.__class__.__name__
         self.requires_admin = False
 
-        self.fields = {}
         self.ignore_keys = []
         self.keep_keys = []
 
@@ -824,13 +823,11 @@ ALL_GENERATORS_CLS = [
     BitLocker,
 ]
 
-ALL_GENERATORS: List[Generator] = [generator() for generator in ALL_GENERATORS_CLS]
-
-
 def execute_generators():
     executed = []
 
-    for generator in ALL_GENERATORS:
+    all_generators: List[Generator] = [generator() for generator in ALL_GENERATORS_CLS]
+    for generator in all_generators:
         if generator.requires_admin and not IS_ADMIN:
             continue
 
@@ -869,6 +866,12 @@ def run():
     print(f"user: {USER_NAME}")
     print(f"is_admin: {IS_ADMIN}")
 
+try:
+    import plugin
+except ModuleNotFoundError:
+    pass
+else:
+    plugin.hook(locals())
 
 if __name__ == '__main__':
     run()
