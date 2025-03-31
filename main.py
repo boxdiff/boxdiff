@@ -29,40 +29,40 @@ USER_PATH = Path(f"C:\\Users\\{USER_NAME}")
 
 def get_html_head(title, h1):
     html = f"""<!DOCTYPE html>
-            <html>
-            <head>
-                <title>{escape(title)}</title>
+<html>
+<head>
+    <title>{escape(title)}</title>
 
-            <style>
-                body {{
-                    font-family: Sans-Serif;
-                    background: #191919;
-                    color: #ccc;
-                }}
-                
-                h2 {{
-                    color: #4cc2ff;
-                    padding-top: 2em;
-                }}
-                
-                .entry-block {{
-                    padding-left: 2em;
-                }}
+<style>
+    body {{
+        font-family: Sans-Serif;
+        background: #191919;
+        color: #ccc;
+    }}
+    
+    h2 {{
+        color: #4cc2ff;
+        padding-top: 2em;
+    }}
+    
+    .entries {{
+        padding-left: 2em;
+    }}
 
-                li{{
-                    padding-bottom: 0.5em;
-                }}
+    li{{
+        padding-bottom: 0.5em;
+    }}
 
-                .arrow{{
-                    color: #4cc2ff;
-                    font-weight: bold;
-                    font-size: 1.2em;
-                }}
-            </style>
+    .arrow{{
+        color: #4cc2ff;
+        font-weight: bold;
+        font-size: 1.2em;
+    }}
+</style>
 
-            </head>
-            <body>
-            <h1>{escape(h1)} - {DATE}</h1>
+</head>
+<body>
+<h1>{escape(h1)} - {DATE}</h1>
 """
     return html
 
@@ -173,20 +173,24 @@ class Generator(metaclass=ABCMeta):
 
     @staticmethod
     def entry_block(title, entries) -> str:
-        html = f"<h2>{title} ({len(entries)})</h2>\n"
-        html += "<div class='entry-block'>\n"
+        html = "\n<div class='entry-block'>"
+        html += f"\n\t<h2>{title} ({len(entries)})</h2>\n"
+        html += "\t<div class='entries'>\n"
         for e in entries:
-            html += f"<h3>{escape(e.display_name)} ({escape(e.unique_name)})</h3>\n"
-            html += "<ul>\n"
+            html += "\t\t<div class='entry'>\n"
+            html += f"\t\t\t<h3>{escape(e.display_name)} ({escape(e.unique_name)})</h3>\n"
+            html += "\t\t\t<ul>\n"
             for key, value in e.fields.items():
                 try:
                     value = escape(value)
                 except Exception:
                     pass
 
-                html += f"<li>{escape(key)}: {value}</li>\n"
-            html += "</ul>\n"
-        html += "</div>"
+                html += f"\t\t\t\t<li>{escape(key)}: {value}</li>\n"
+            html += "\t\t\t</ul>\n"
+            html += "\t\t</div>\n"
+        html += "\t</div>\n"
+        html += "</div>\n"
 
         return html
 
@@ -200,11 +204,13 @@ class Generator(metaclass=ABCMeta):
         html += self.entry_block("Removed", self.removed_entries)
 
         # Changed
-        html += f"<h2>Changed ({len(self.changed_data)})</h2>\n"
-        html += "<div class='entry-block'>\n"
+        html += "\n<div class='entry-block'>"
+        html += f"\n\t<h2>Changed ({len(self.changed_data)})</h2>\n"
+        html += "\t<div class='entries'>\n"
         for e in self.changed_data:
-            html += f"<h3>{escape(e.display_name)} ({escape(e.unique_name)})</h3>\n"
-            html += "<ul>"
+            html += "\t\t<div class='entry'>\n"
+            html += f"\t\t\t<h3>{escape(e.display_name)} ({escape(e.unique_name)})</h3>\n"
+            html += "\t\t\t<ul>\n"
             for key, before_value, after_value in e.changed_fields:
                 try:
                     before_value = escape(before_value)
@@ -216,15 +222,17 @@ class Generator(metaclass=ABCMeta):
                 except Exception:
                     pass
 
-                html += f"<li>{escape(key)}: {before_value} <span class='arrow'>-></span> {after_value}</li>\n"
-            html += "</ul>\n"
+                html += f"\t\t\t\t<li>{escape(key)}: {before_value} <span class='arrow'>-></span> {after_value}</li>\n"
+            html += "\t\t\t</ul>\n"
+            html += "\t\t</div>\n"
+        html += "\t</div>\n"
         html += "</div>\n"
 
         # Current
         html += self.entry_block("Current", self.entries)
 
         # End
-        html += "</body></html>"
+        html += "\n</body>\n</html>"
 
         path = os.path.join(RESULTS_DIR_NAME, self.get_html_name())
         with open(path, "w", encoding="utf-8") as f:
