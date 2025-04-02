@@ -643,7 +643,7 @@ class ComputerInfo(PowershellGenerator):
                           'OsMaxNumberOfProcesses', 'OsMaxProcessMemorySize', 'OsEncryptionLevel', 'OsDistributed',
                           'OsCodeSet', 'OsLocaleID', 'OsWindowsDirectory', 'OsSystemDrive', 'OsSystemDirectory',
                           'OsSystemDevice', 'OsBootDevice', 'OsBuildNumber', 'OsOperatingSystemSKU', 'OsType',
-                          'CsWorkgroup', 'CsWakeUpType', 'CsUserName', 'CsPrimaryOwnerName', 'CsPartOfDomain',
+                          'CsWorkgroup', 'CsUserName', 'CsPrimaryOwnerName', 'CsPartOfDomain',
                           'CsPowerOnPasswordStatus', 'CsManufacturer', 'CsBootupState', 'CsDomain', 'CsDNSHostName',
                           'CsBootROMSupported', 'CsAutomaticResetCapability', 'CsAutomaticResetBootOption',
                           'CsAutomaticManagedPagefile', 'CsAdminPasswordStatus', 'BiosVersion',
