@@ -95,6 +95,7 @@ class Generator(metaclass=ABCMeta):
     def __init__(self):
         self.name = self.__class__.__name__
         self.requires_admin = False
+        self.skip_duplicates = False
 
         self.ignore_keys = []
         self.keep_keys = []
@@ -284,6 +285,7 @@ class PowershellGenerator(Generator):
         entries = []
         for item in items:
             self.process_fields(item)
+
             fields = {}
             for key, value in sorted(item.items()):
                 if self.ignore_keys:
@@ -304,6 +306,8 @@ class PowershellGenerator(Generator):
             assert entry.unique_name
 
             if entry.unique_name in unique_names:
+                if self.skip_duplicates:
+                    continue
                 import pdb
                 pdb.set_trace()
                 assert False, entry.unique_name
@@ -699,6 +703,30 @@ class Keyboards(PowershellGenerator):
         self.keep_keys = ['Description', 'DeviceID', 'Availability', 'Caption', ]
 
 
+class Certificates(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.skip_duplicates = True
+        self.display_key = 'FriendlyName'
+        self.unique_key = 'FriendlyName'
+        self.command += '"Get-ChildItem Cert:\\ -Recurse | ConvertTo-Json"'
+        self.keep_keys = ['Archived', 'Location','FriendlyName','NotAfter', 'NotBefore', 'HasPrivateKey', 'PrivateKey', 'RawData', 'SerialNumber', 'SubjectName', 'Thumbprint', 'Version', 'Issuer', 'Subject', 'PSPath', 'PSChildName']
+
+    def process_fields(self, fields: Dict):
+        fields['FriendlyName'] = fields.get('FriendlyName') or fields.get('Name') or fields.get('Subject') or fields.get('PSPath')
+        assert fields['FriendlyName'], fields
+
+        fields.setdefault('Thumbprint', 'No Thumbprint')
+        fields['FriendlyName'] += f"-{fields['Thumbprint']}"
+        if fields['Thumbprint'] == 'No Thumbprint':
+            fields['FriendlyName'] += f'-{fields['Location']}'
+
+        raw_data = fields.get('RawData')
+        if raw_data:
+            fields['RawData'] = str(raw_data)
+
+
 class EnvironmentVariables(Generator):
 
     def __init__(self):
@@ -861,6 +889,7 @@ ALL_GENERATORS_CLS = [
     BitLocker,
     SecureBootPolicy,
     ConfirmSecureBootUEFI,
+    Certificates,
 ]
 
 def execute_generators():
