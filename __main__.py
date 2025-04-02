@@ -593,6 +593,38 @@ class Tpm(PowershellGenerator):
         self.command += '"Get-Tpm | ConvertTo-Json"'
 
 
+class SecureBootPolicy(PowershellGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.display_key = "Publisher"
+        self.unique_key = "Publisher"
+        self.command += '"Get-SecureBootPolicy | ConvertTo-Json"'
+
+
+class ConfirmSecureBootUEFI(Generator):
+
+    def __init__(self):
+        super().__init__()
+        self.requires_admin = True
+
+    def get(self):
+        command = 'powershell "Confirm-SecureBootUEFI"'
+        proc = subprocess.run(command, text=True, capture_output=True, check=False, encoding="utf-8")
+        assert proc.returncode == 0, f"{proc.returncode}\n{proc.stdout}\n{proc.stderr}"
+        output = proc.stdout.strip() + proc.stderr.strip()
+        fields = {
+            "output": output,
+        }
+        self.process_fields(fields)
+
+        entry = Entry()
+        entry.display_name = "SecureBootEnabled"
+        entry.unique_name = entry.display_name
+        entry.fields = fields
+        self.entries = [entry]
+
+
 class ComputerInfo(PowershellGenerator):
 
     def __init__(self):
@@ -827,6 +859,8 @@ ALL_GENERATORS_CLS = [
     Drivers,
     Tpm,
     BitLocker,
+    SecureBootPolicy,
+    ConfirmSecureBootUEFI,
 ]
 
 def execute_generators():
