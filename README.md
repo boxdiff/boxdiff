@@ -1,16 +1,36 @@
-# BoxDiff - Diff your Box
+# BoxDiff
+<div align="center">
+<img src="./cover.png" alt="BoxDiff Logo">
+A simple, dependency free, Python script that gives you a "diff" of your box by showing you what was added, removed, 
+or changed
+<br/>
+<a href="https://discord.gg/JdrGQKqAUe">Discord</a>
+
+</div>
 
 ## 💎 About
 
 A simple, dependency free, Python script that gives you a "diff" of your box by showing you what was added, removed, 
-or changed. It outputs the results to html.  
+or changed. 
 It just executes several powershell commands and directory listings.  
-Tested on Windows 11.  Other platforms not supported.
+Results are html files.  
+
+Tested on Windows 11.  Other platforms not supported.  
 
 It's designed, and meant to remain, simple and easy to maintain long term. No dependencies, no gui.  
 Feel free to fork if you need major changes.
 
-[Discord](https://discord.gg/JdrGQKqAUe)
+A small subset of what's collected
+
+- Devices
+- Services
+- Installed Programs
+- Startup Programs
+- Users
+- Tasks
+- Certificates
+
+If you have a suggestion for new data to be collected, create an [issue](https://github.com/boxdiff/boxdiff/issues/new)
 
 ## 📖 How to Use
 
@@ -29,7 +49,7 @@ $ copy .\boxdiff\sample_plugin.py .\plugin.py
 $ python -m boxdiff
 
 # You can collect data from a different user.
-# Also, run command prompt as Admin to get additional data
+# Running command prompt as Admin is required to get all data
 $ python -m boxdiff
 $ python -m boxdiff Administrator
 $ python -m boxdiff anotherUser
