@@ -197,7 +197,6 @@ class Generator(metaclass=ABCMeta):
 
     def write_results(self):
         html = get_html_head(self.name, self.name)
-        # TODO refactor. Add classes.
         # Added
         html += self.entry_block("Added", self.added_entries)
 
@@ -757,6 +756,45 @@ class EnvironmentVariables(Generator):
         self.entries = entries
 
 
+class WindowsCredentials(Generator):
+
+    def __init__(self):
+        super().__init__()
+
+    def get(self):
+        command = "cmdkey /list"
+        proc = subprocess.run(command, text=True, capture_output=True, check=False, encoding="utf-8")
+        assert proc.returncode == 0, f"{proc.returncode}\n{proc.stdout}\n{proc.stderr}"
+
+        fields = {}
+        entries = []
+        lines = proc.stdout.splitlines()
+        for line in lines:
+            split = line.split(":")
+            key = split[0].strip().lower()
+            try:
+                value = ':'.join(split[1:])  # reassemble value
+                value = value.strip()
+            except IndexError:
+                value = None
+
+            if key == "target":
+                fields = {'target': value}
+            elif key == "type":
+                fields['type'] = value
+            elif key == 'user':
+                fields['user'] = value
+                self.process_fields(fields)
+                entry = Entry()
+                unique_name = f'{fields['target']}-{fields['user']}'
+                entry.display_name = unique_name
+                entry.unique_name = unique_name
+                entry.fields = fields
+                entries.append(entry)
+
+        self.entries = entries
+
+
 class DirListing(Generator):
 
     def __init__(self):
@@ -879,6 +917,7 @@ ALL_GENERATORS_CLS = [
     SmbShares,
     Tasks,
     FirewallRules,
+    WindowsCredentials,
     ComputerInfo,
     OsConfig,
     InstalledPrograms,
