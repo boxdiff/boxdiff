@@ -795,6 +795,26 @@ class WindowsCredentials(Generator):
         self.entries = entries
 
 
+class Logons(PowershellGenerator):
+
+    DAYS = 30
+
+    def __init__(self):
+        super().__init__()
+        self.requires_admin = True
+        self.skip_duplicates = True
+        self.unique_key = 'Name'
+        self.display_key = 'Name'
+        self.command += f'"Get-EventLog -LogName Security | Where-Object {{ $_.EventID -eq 4624 -and $_.TimeGenerated -gt (Get-Date).AddDays(-{self.DAYS}) }} | Select-Object @{{Name=\'User\';Expression={{$_.ReplacementStrings[5]}}}}, @{{Name=\'Domain\';Expression={{$_.ReplacementStrings[6]}}}}, @{{Name=\'Process\';Expression={{$_.ReplacementStrings[17]}}}}, @{{Name=\'IP\';Expression={{$_.ReplacementStrings[18]}}}} | ConvertTo-Json"'
+
+    def process_fields(self, fields):
+        if fields['IP'] in ('::1', '127.0.0.1'):  # ignore these IPs
+            fields['IP'] = '-'
+        if fields['Process'] == 'C:\\Windows\\System32\\vmcompute.exe':  # windowssandbox
+            fields['User'] = 'vmcompute.exe'
+        fields['Name'] = f"{fields['User']}-{fields['Domain']}-{fields['Process']}-{fields['IP']}"
+
+
 class DirListing(Generator):
 
     def __init__(self):
@@ -929,6 +949,7 @@ ALL_GENERATORS_CLS = [
     SecureBootPolicy,
     ConfirmSecureBootUEFI,
     Certificates,
+    Logons,
 ]
 
 def execute_generators():
